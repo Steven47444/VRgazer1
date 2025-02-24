@@ -64,24 +64,27 @@
 </head>
 <body>
 
-    <!-- 实验说明 -->
+    <!-- 实验说明页面 -->
     <div class="container" id="instructionContainer">
         <h1>实验说明</h1>
         <p>感谢您参与本次实验！</p>
-        <p>本次实验任务是自由观看一段3分钟的VR全景视频，我们将收集您的眼动数据并录制屏幕。</p>
+        <p>本次实验任务是自由观看一段3分钟的VR全景视频，在实验期间，我们将会收集您的眼动数据并录制屏幕。</p>
         <p>在VR全景视频中，您可以通过鼠标左右拖动屏幕来改变主视角。</p>
-        <p>视频结束后需要您再扫码填写一份问卷。</p>
+        <p>视频结束后需要您再扫码填写一份3分钟左右的问卷。</p>
         <button id="consentButton">我已知情并同意参加实验</button>
     </div>
 
-    <!-- 校准说明 -->
+    <!-- 校准说明页面 -->
     <div class="container" id="calibrationContainer">
         <h1>校准说明</h1>
-        <p>为了更准确地收集眼动数据，您需要进行校准。</p>
-        <p>请点击“开始校准”按钮，完成后返回该网页并点击“我已完成校准”。</p>
+        <p>为了更准确地收集眼动数据，您需要进行眼动校准。</p>
+        <p>请点击下面的“开始校准”按钮进行校准，完成后请记下您的准确率并直接返回该网页。</p>
+        <p>并点击“我已完成校准，直接开始实验”按钮开始实验。</p>
         <button id="startCalibrationButton">我未完成校准，开始校准</button>
         <br><br>
         <button id="skipCalibrationButton">我已完成校准，直接开始实验</button>
+        
+        <!-- 插入图片 -->
         <img src="instruction.png" alt="Instruction" style="width: 100%; max-width: 500px; margin-top: 20px; margin-bottom: 20px;" />
     </div>
 
@@ -89,17 +92,18 @@
     <div class="container" id="experimentContainer">
         <h1>实验开始</h1>
         <p>请点击“开始实验”按钮，然后观看视频。</p>
-        <p>点击后会有5秒准备时间。</p>
+        <p>点击后会有5秒准备时间，此为正常实验准备时间。</p>
+        <p>如果视频播放期间出现问题，点击右下角VR按钮再按Esc退出即可。</p>
         <button id="startExperimentButton">开始实验</button>
     </div>
 
-    <!-- 视频播放提示 -->
+    <!-- 提示视频开始播放 -->
     <div class="container" id="videoInstructions">
         <h1>实验准备中</h1>
-        <p>请点击录制整个屏幕并共享后静坐5秒，实验视频会自动播放。</p>
+        <p>请您点击录制整个屏幕并共享后静坐5秒，实验视频会自动播放。</p>
     </div>
 
-    <!-- VR 视频 -->
+    <!-- 视频播放页面 -->
     <a-scene id="scene" embedded>
         <a-assets>
             <video id="vr-video" src="bayi-360.mp4" loop="false" preload="auto"></video>
@@ -110,8 +114,11 @@
     <!-- 结束页面 -->
     <div class="container" id="finalMessageContainer">
         <h1>实验结束</h1>
-        <p>请将您的眼动数据和屏幕录制视频下载并提交。</p>
+        <p>请将您的眼动数据和屏幕录制视频发给主试。</p>
+        <p>并请您扫描以下问卷二维码。</p>
         <p>感谢您的参与！</p>
+    
+        <!-- 插入二维码图片 -->
         <img src="qrcode.png" alt="QR Code" style="width: 200px; height: 200px; margin-top: 20px;" />
     </div>
 
