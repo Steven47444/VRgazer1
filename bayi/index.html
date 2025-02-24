@@ -57,6 +57,17 @@
             position: fixed;
             z-index: 9999;
         }
+        #recordingStatus {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff4444;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            display: none;
+            z-index: 10000;
+        }
         .overlay-hidden {
             display: none !important;
         }
@@ -83,8 +94,6 @@
         <button id="startCalibrationButton">我未完成校准，开始校准</button>
         <br><br>
         <button id="skipCalibrationButton">我已完成校准，直接开始实验</button>
-        
-        <!-- 插入图片 -->
         <img src="instruction.png" alt="Instruction" style="width: 100%; max-width: 500px; margin-top: 20px; margin-bottom: 20px;" />
     </div>
 
@@ -92,8 +101,7 @@
     <div class="container" id="experimentContainer">
         <h1>实验开始</h1>
         <p>请点击“开始实验”按钮，然后观看视频。</p>
-        <p>点击后会有5秒准备时间，此为正常实验准备时间。</p>
-        <p>如果视频播放期间出现问题，点击右下角VR按钮再按Esc退出即可。</p>
+        <p>点击后会有5秒准备时间。</p>
         <button id="startExperimentButton">开始实验</button>
     </div>
 
@@ -106,7 +114,12 @@
     <!-- 视频播放页面 -->
     <a-scene id="scene" embedded>
         <a-assets>
-            <video id="vr-video" src="bayi-360.mp4" loop="false" preload="auto"></video>
+            <video id="vr-video" 
+                   src="bayi-360.mp4" 
+                   loop="false" 
+                   preload="none"
+                   autoplay="false"
+                   muted></video>
         </a-assets>
         <a-sky id="sky" src="#vr-video" rotation="0 0 0" visible="false"></a-sky>
     </a-scene>
@@ -117,10 +130,11 @@
         <p>请将您的眼动数据和屏幕录制视频发给主试。</p>
         <p>并请您扫描以下问卷二维码。</p>
         <p>感谢您的参与！</p>
-    
-        <!-- 插入二维码图片 -->
         <img src="qrcode.png" alt="QR Code" style="width: 200px; height: 200px; margin-top: 20px;" />
     </div>
+
+    <!-- 录制状态提示 -->
+    <div id="recordingStatus">● 录制中</div>
 
     <script>
         let gazeData = [];
@@ -130,12 +144,7 @@
         let videoElement = document.getElementById('vr-video');
         let skyElement = document.getElementById('sky');
         let stream;
-
-        videoElement.addEventListener('canplaythrough', function() {
-            videoElement.play();
-        });
-
-        videoElement.addEventListener('ended', handleVideoEnd);
+        let recordingStartTime;
 
         window.onload = function() {
             webgazer.setRegression('ridge').setTracker('TLD').begin();
@@ -146,26 +155,116 @@
             document.getElementById('startExperimentButton').onclick = startExperimentFlow;
         };
 
-        function showSection(sectionId) {
-            document.querySelectorAll('.container').forEach(el => el.style.display = 'none');
-            const section = document.getElementById(sectionId);
-            if (section) section.style.display = 'block';
+        async function startScreenRecording() {
+            try {
+                stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { mediaSource: "screen" },
+                    audio: false
+                });
+
+                recorder = RecordRTC(stream, {
+                    type: 'video',
+                    mimeType: 'video/webm;codecs=vp9',
+                    timeSlice: 1000,
+                    ondataavailable: function(blob) {
+                        // 实时保存数据块
+                    }
+                });
+
+                recorder.startRecording();
+                isRecording = true;
+                recordingStartTime = Date.now();
+                document.getElementById('recordingStatus').style.display = 'block';
+
+                videoElement.addEventListener('ended', stopRecordingAndSave);
+                
+            } catch (error) {
+                console.error('屏幕录制失败:', error);
+                alert('必须允许屏幕共享才能继续实验！');
+                location.reload();
+            }
+        }
+
+        async function stopRecordingAndSave() {
+            if (!isRecording) return;
+            
+            return new Promise(resolve => {
+                recorder.stopRecording(() => {
+                    const blob = recorder.getBlob();
+                    const filename = `recording_${Date.now()}.webm`;
+                    
+                    // 创建下载链接
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = filename;
+                    link.click();
+                    
+                    isRecording = false;
+                    stream.getTracks().forEach(track => track.stop());
+                    document.getElementById('recordingStatus').style.display = 'none';
+                    resolve();
+                });
+            });
         }
 
         async function startExperimentFlow() {
+            // 先启动屏幕录制
+            await startScreenRecording();
+            
             showSection('videoInstructions');
+
+            // 初始化播放权限
             try {
-                await startRecording();
-                setTimeout(() => {
-                    showSection(null);
-                    document.getElementById('scene').classList.remove('overlay-hidden');
-                    skyElement.setAttribute('visible', 'true');  
-                    videoElement.play();
-                    startGazeTracking();
-                }, 5000);
+                await videoElement.play();
+                videoElement.pause();
+                videoElement.currentTime = 0;
             } catch (error) {
-                console.error('启动实验失败:', error);
+                console.error('播放准备失败:', error);
             }
+
+            setTimeout(async () => {
+                showSection(null);
+                document.getElementById('scene').classList.remove('overlay-hidden');
+                skyElement.setAttribute('visible', 'true');
+
+                try {
+                    await videoElement.play();
+                    
+                    // 5秒后解除静音
+                    setTimeout(() => {
+                        try {
+                            videoElement.muted = false;
+                            console.log('已解除静音状态');
+                        } catch (error) {
+                            console.warn('无法自动解除静音:', error);
+                            alert('请点击页面任意位置启用声音');
+                            document.body.addEventListener('click', () => {
+                                videoElement.muted = false;
+                            }, { once: true });
+                        }
+                    }, 5000);
+
+                } catch (error) {
+                    console.error('自动播放被阻止:', error);
+                    alert('请点击页面任意位置开始播放视频');
+                    document.body.addEventListener('click', async () => {
+                        await videoElement.play();
+                        setTimeout(() => {
+                            videoElement.muted = false;
+                        }, 5000);
+                    }, { once: true });
+                }
+
+                startGazeTracking();
+                
+                // 3分钟后自动结束
+                setTimeout(async () => {
+                    await stopRecordingAndSave();
+                    showSection('finalMessageContainer');
+                    isCollecting = false;
+                }, 180000);
+
+            }, 5000);
         }
 
         function startGazeTracking() {
@@ -175,58 +274,19 @@
                     gazeData.push({
                         x: data.x,
                         y: data.y,
-                        timestamp: Date.now()
+                        timestamp: Date.now() - recordingStartTime
                     });
                 }
             });
         }
 
-        async function handleVideoEnd() {
-            isCollecting = false;
-            webgazer.pause();
-            await stopRecording();
-            saveGazeData();
-            showSection('finalMessageContainer');
-        }
-
-        async function startRecording() {
-            try {
-                stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                recorder = new RecordRTC(stream, { type: 'video', mimeType: 'video/webm' });
-                recorder.startRecording();
-                isRecording = true;
-            } catch (error) {
-                console.error('屏幕录制失败:', error);
-            }
-        }
-
-        function stopRecording() {
-            return new Promise(resolve => {
-                if (recorder && isRecording) {
-                    recorder.stopRecording(() => {
-                        const blob = recorder.getBlob();
-                        downloadFile(blob, "recording.webm");
-                        isRecording = false;
-                        resolve();
-                    });
-                } else resolve();
+        function showSection(sectionId) {
+            const sections = ['instructionContainer', 'calibrationContainer', 
+                            'experimentContainer', 'videoInstructions', 'finalMessageContainer'];
+            sections.forEach(id => {
+                document.getElementById(id).style.display = 
+                    id === sectionId ? 'block' : 'none';
             });
-        }
-
-        function saveGazeData() {
-            if (gazeData.length === 0) return;
-            const blob = new Blob([JSON.stringify(gazeData)], { type: 'application/json' });
-            downloadFile(blob, "gaze_data.json");
-            gazeData = [];
-        }
-
-        function downloadFile(blob, filename) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
         }
     </script>
 </body>
