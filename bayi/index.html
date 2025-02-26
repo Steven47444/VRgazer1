@@ -146,112 +146,99 @@
         let stream;
         let recordingStartTime;
 
+        // 初始化WebGazer.js
         window.onload = function() {
             webgazer.setRegression('ridge').setTracker('TLD').begin();
 
             document.getElementById('consentButton').onclick = () => showSection('calibrationContainer');
             document.getElementById('startCalibrationButton').onclick = () => window.location.href = 'https://webgazer.cs.brown.edu/calibration.html?#';
             document.getElementById('skipCalibrationButton').onclick = () => showSection('experimentContainer');
-            document.getElementById('startExperimentButton').onclick = startExperimentFlow;
+            document.getElementById('startExperimentButton').onclick = startExperiment;
+            document.getElementById('finalMessageContainer').style.display = 'none';
+
+            // 监听眼动数据
+            webgazer.setGazeListener(function(data, elapsedTime) {
+                if (data) {
+                    const xprediction = data.x;
+                    const yprediction = data.y;
+                    const timestamp = elapsedTime;
+
+                    // 保存眼动数据
+                    gazeData.push({ x: xprediction, y: yprediction, timestamp: timestamp });
+
+                    // 每秒保存一次数据
+                    if (gazeData.length % 30 === 0) {  // 30个数据点约等于1秒
+                        console.log("Saving gaze data...");
+                    }
+                }
+            });
         };
 
-        async function startScreenRecording() {
-            try {
-                stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { mediaSource: "screen" },
-                    audio: false
-                });
-
-                recorder = RecordRTC(stream, {
-                    type: 'video',
-                    mimeType: 'video/webm;codecs=vp9',
-                    timeSlice: 1000,
-                    ondataavailable: function(blob) {
-                        // 实时保存数据块
-                    }
-                });
-
-                recorder.startRecording();
-                isRecording = true;
-                recordingStartTime = Date.now();
-                document.getElementById('recordingStatus').style.display = 'block';
-
-                videoElement.addEventListener('ended', stopRecordingAndSave);
-                
-            } catch (error) {
-                console.error('屏幕录制失败:', error);
-                alert('必须允许屏幕共享才能继续实验！');
-                location.reload();
-            }
-        }
-
-        async function stopRecordingAndSave() {
-            if (!isRecording) return;
-            
-            return new Promise(resolve => {
-                recorder.stopRecording(() => {
-                    const blob = recorder.getBlob();
-                    const filename = `recording_${Date.now()}.webm`;
-                    
-                    // 创建下载链接
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = filename;
-                    link.click();
-
-                    // 保存眼动数据为JSON文件
-                    const gazeDataBlob = new Blob([JSON.stringify(gazeData)], { type: 'application/json' });
-                    const gazeDataLink = document.createElement('a');
-                    gazeDataLink.href = URL.createObjectURL(gazeDataBlob);
-                    gazeDataLink.download = `gazeData_${Date.now()}.json`;
-                    gazeDataLink.click();
-
-                    isRecording = false;
-                    stream.getTracks().forEach(track => track.stop());
-                    document.getElementById('recordingStatus').style.display = 'none';
-                    resolve();
-                });
-            });
-        }
-
-        async function startExperimentFlow() {
-            // 先启动屏幕录制
-            await startScreenRecording();
-            
+        // 开始实验
+        function startExperiment() {
             showSection('videoInstructions');
-
-            // 初始化播放权限
-            try {
-                await videoElement.play();
-                videoElement.pause();
-                videoElement.currentTime = 0;
-            } catch (error) {
-                console.error('播放准备失败:', error);
-            }
-
-            setTimeout(async () => {
-                showSection(null);
-                document.getElementById('scene').classList.remove('overlay-hidden');
-                skyElement.setAttribute('visible', 'true');
+            setTimeout(() => {
+                skyElement.setAttribute('visible', true);
                 videoElement.play();
+                videoElement.muted = false;  // 取消静音
+                startRecording();
             }, 5000);
         }
 
+        // 显示不同的实验界面
         function showSection(sectionId) {
-            ['instructionContainer', 'calibrationContainer', 'experimentContainer', 'videoInstructions', 'finalMessageContainer'].forEach(id => {
+            const sections = ['instructionContainer', 'calibrationContainer', 'experimentContainer', 'finalMessageContainer', 'videoInstructions'];
+            sections.forEach(id => {
                 document.getElementById(id).style.display = id === sectionId ? 'block' : 'none';
             });
         }
 
-        // 记录眼动数据
-        webgazer.setGazeListener((data, elapsedTime) => {
-            if (data == null || !isCollecting) return;
-            gazeData.push({
-                timestamp: elapsedTime,
-                x: data.x,
-                y: data.y
+        // 保存眼动数据为 .js 文件
+        function saveGazeData() {
+            const gazeDataBlob = new Blob([`const gazeData = ${JSON.stringify(gazeData)};`], { type: 'application/javascript' });
+            const url = URL.createObjectURL(gazeDataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `gazeData_${Date.now()}.js`;
+            link.click();
+        }
+
+        // 开始录制函数
+        function startRecording() {
+            navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }).then(function(stream) {  // 使用 getDisplayMedia
+                recorder = RecordRTC(stream, {
+                    type: 'video'
+                });
+                recorder.startRecording();
+                isRecording = true;
+                document.getElementById('recordingStatus').style.display = 'block';
+            }).catch(function(error) {
+                console.error('Failed to get screen media stream:', error);
             });
-        });
+        }
+
+
+        // 停止录制并保存数据函数
+        function stopRecordingAndSave() {
+            if (isRecording) {
+                isRecording = false;
+                recorder.stopRecording(function() {
+                    // 保存视频文件
+                    recorder.save(`experiment_video_${Date.now()}.webm`);
+                });
+                document.getElementById('recordingStatus').style.display = 'none';
+            }
+        }
+
+        // 在视频结束时停止录制并保存眼动数据和视频
+        videoElement.onended = function() {
+            stopRecordingAndSave(); // 停止录制并保存视频
+            saveGazeData(); // 保存眼动数据
+            webgazer.pause(); // 停止眼动追踪
+            showSection('finalMessageContainer'); // 显示实验结束页面
+        };
+
     </script>
+
 </body>
 </html>
